@@ -63,6 +63,9 @@ canvas#fx{position:fixed;inset:0;width:100%;height:100%;pointer-events:none}
     <div class="hero"><div class="city" id="city"></div><div class="date" id="date"></div><span id="bigico"></span><div class="temp" id="temp"></div><div class="desc" id="desc"></div><div class="hl" id="hl"></div><div class="tip" id="tip" style="display:none"></div></div>
     <div class="glass"><h3>الساعات الجاية</h3><div class="hours" id="hours"></div></div>
     <div class="glass"><h3>توقعات ٧ أيام</h3><div id="days"></div></div>
+    <div class="glass"><h3>منحنى الحرارة (٢٤ ساعة)</h3><div id="tcurve"></div></div>
+    <div class="glass"><h3>جودة الهواء</h3><div id="aqi" style="min-height:60px">...</div></div>
+    <div class="glass"><h3>الشمس النهارده</h3><div id="sunarc"></div></div>
     <div class="glass"><h3>تفاصيل</h3><div class="grid"><div><span>الإحساس</span><b id="fl"></b></div><div><span>الرطوبة</span><b id="hu"></b></div><div><span>الرياح</span><b id="wi"></b></div><div><span>الشروق</span><b id="sr"></b></div><div><span>الغروب</span><b id="ss"></b></div><div><span>احتمال مطر</span><b id="pr"></b></div><div><span>الأشعة فوق البنفسجية</span><b id="uv"></b></div><div><span>الغيوم</span><b id="cc"></b></div><div><span>الضغط</span><b id="ps"></b></div></div></div>
   </div>
   <div class="upd" id="upd"></div>
@@ -143,8 +146,31 @@ let tmr;$("q").oninput=()=>{clearTimeout(tmr);const v=$("q").value.trim();if(v.l
 $("res").onclick=e=>{const d=e.target.closest("[data-i]");if(!d)return;const x=$("res").r[+d.dataset.i];let i=S.cities.findIndex(c=>Math.abs(c.lat-x.latitude)<.05&&Math.abs(c.lon-x.longitude)<.05);
   if(i<0){S.cities.push({n:x.name,lat:x.latitude,lon:x.longitude});i=S.cities.length-1}S.cur=i;save();$("res").style.display="none";$("q").value="";load()};
 $("loc").onclick=()=>{if(!navigator.geolocation)return;navigator.geolocation.getCurrentPosition(p=>{S.cities.push({n:"موقعي",lat:p.coords.latitude,lon:p.coords.longitude});S.cities=S.cities.filter((c,i)=>c.n!="موقعي"||i==S.cities.length-1);S.cur=S.cities.length-1;save();load()},()=>alert("مقدرتش أحدد موقعك. اسمح بالوصول للموقع أو ابحث باسم المدينة."))};
+
+/* ---- extras: temp curve, air quality, sun arc ---- */
+const _render0=render;
+render=function(c,d){_render0(c,d);try{extra(c,d)}catch(e){console.error(e)}};
+function extra(c,d){
+  const ct=d.current.time,hi=d.hourly.time.findIndex(x=>x>=ct.slice(0,13));
+  const T=d.hourly.temperature_2m.slice(hi,hi+24),n=T.length;if(n>2){
+    const mn=Math.min(...T),mx=Math.max(...T),W=320,H=110,px=i=>10+i*(W-20)/(n-1),py=v=>18+(H-40)*(1-(v-mn)/Math.max(1,mx-mn));
+    const pts=T.map((v,i)=>px(i).toFixed(1)+","+py(v).toFixed(1));
+    let lab="";[0,6,12,18,23].forEach(i=>{if(i<n){const h=+d.hourly.time[hi+i].slice(11,13);lab+=`<text x="${px(i)}" y="${H-2}" fill="#fff9" font-size="10" text-anchor="middle">${i==0?"الآن":AR(h%12||12)+(h<12?"ص":"م")}</text><text x="${px(i)}" y="${py(T[i])-7}" fill="#fff" font-size="11" font-weight="700" text-anchor="middle">${AR(Math.round(T[i]))}°</text><circle cx="${px(i)}" cy="${py(T[i])}" r="3" fill="#fff"/>`}});
+    $("tcurve").innerHTML=`<svg viewBox="0 0 ${W} ${H}" style="width:100%;direction:ltr"><defs><linearGradient id="tg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".35"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient></defs><polygon points="${px(0)},${H-16} ${pts.join(" ")} ${px(n-1)},${H-16}" fill="url(#tg)"/><polyline points="${pts.join(" ")}" fill="none" stroke="#fff" stroke-width="2.5" stroke-linejoin="round"/>${lab}</svg>`}
+  // sun arc
+  const mm=s=>+s.slice(11,13)*60+ +s.slice(14,16),sr=mm(d.daily.sunrise[0]),ss=mm(d.daily.sunset[0]),now=mm(ct),f=Math.max(0,Math.min(1,(now-sr)/(ss-sr)));
+  const ang=Math.PI*(1-f),X=160+130*Math.cos(ang),Y=100-90*Math.sin(ang),up=now>=sr&&now<=ss,dl=ss-sr;
+  const tm=s=>{const h=+s.slice(11,13);return AR(h%12||12)+":"+AR(s.slice(14,16))+(h<12?" ص":" م")};
+  $("sunarc").innerHTML=`<svg viewBox="0 0 320 124" style="width:100%;direction:ltr"><path d="M30 100A130 90 0 0 1 290 100" fill="none" stroke="#fff5" stroke-width="2" stroke-dasharray="4 5"/><line x1="10" y1="100" x2="310" y2="100" stroke="#fff4"/>${up?`<path d="M30 100A130 90 0 0 1 ${X.toFixed(1)} ${Y.toFixed(1)}" fill="none" stroke="#FDE047" stroke-width="3"/><circle cx="${X.toFixed(1)}" cy="${Y.toFixed(1)}" r="8" fill="#FDE047"/>`:`<text x="160" y="70" fill="#fffc" font-size="14" text-anchor="middle">🌙 الشمس غربت</text>`}<text x="30" y="118" fill="#fffc" font-size="11" text-anchor="middle">🌅 ${tm(d.daily.sunrise[0])}</text><text x="290" y="118" fill="#fffc" font-size="11" text-anchor="middle">🌇 ${tm(d.daily.sunset[0])}</text></svg><div style="text-align:center;font-size:13px;opacity:.85;margin-top:2px">طول النهار ${AR(Math.floor(dl/60))} ساعة و${AR(dl%60)} دقيقة</div>`;
+  // air quality
+  const key=c.lat+","+c.lon;$("aqi").dataset.k=key;
+  fetch(`https://air-quality-api.open-meteo.com/v1/air-quality?latitude=${c.lat}&longitude=${c.lon}&current=us_aqi,pm10,pm2_5,dust`).then(r=>r.json()).then(a=>{
+    if($("aqi").dataset.k!=key)return;const q=a.current||{},v=q.us_aqi;if(v==null){$("aqi").textContent="مش متاح للمدينة دي";return}
+    const L=v<=50?["ممتاز","#4ade80","الهواء نضيف، اخرج براحتك"]:v<=100?["مقبول","#facc15","مقبول، الحساسين ياخدوا بالهم"]:v<=150?["مش كويس للحساسين","#fb923c","لو عندك حساسية صدر خفف المجهود بره"]:v<=200?["وحش","#f87171","قلل الوقت اللي بتقضيه بره"]:["خطر","#c084fc","الأفضل تقعد جوه"];
+    $("aqi").innerHTML=`<div style="display:flex;align-items:center;gap:14px"><div style="font-size:38px;font-weight:900;color:${L[1]}">${AR(v)}</div><div><b style="color:${L[1]}">${L[0]}</b><div style="font-size:13px;opacity:.9">${L[2]}</div></div></div><div style="height:8px;border-radius:6px;margin:10px 0 6px;background:linear-gradient(90deg,#4ade80,#facc15,#fb923c,#f87171,#c084fc);position:relative;direction:ltr"><i style="position:absolute;top:-3px;left:${Math.min(100,v/3)}%;width:4px;height:14px;background:#fff;border-radius:2px"></i></div><div style="font-size:13px;opacity:.85">جزيئات دقيقة PM2.5: ${AR(Math.round(q.pm2_5))} · PM10: ${AR(Math.round(q.pm10))}${q.dust>=50?" · 🌫️ غبار عالي":""}</div>`}).catch(()=>{if($("aqi").dataset.k==key)$("aqi").textContent="مقدرتش أجيب جودة الهواء"})}
 window.W={load,fx:fxSet,S};
 load();
 </script>
 </body></html>
+
 
