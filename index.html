@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0b3b73">
+<title>طقسي - توقعات الطقس</title>
+<style>
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{margin:0;min-height:100vh;color:#fff;font-family:system-ui,-apple-system,"Segoe UI",Tahoma,sans-serif;background:var(--bg,linear-gradient(#0b3b73,#4aa3df));background-attachment:fixed;transition:background .8s}
+canvas#fx{position:fixed;inset:0;width:100%;height:100%;pointer-events:none}
+.wrap{position:relative;max-width:520px;margin:auto;padding:14px 14px 40px}
+.bar{display:flex;gap:8px}
+.bar input{flex:1;min-width:0;background:#ffffff26;border:0;border-radius:16px;padding:13px 16px;color:#fff;font-size:16px;font-family:inherit;backdrop-filter:blur(10px)}
+.bar input::placeholder{color:#ffffffaa}
+.bar button{background:#ffffff26;border:0;border-radius:16px;width:48px;color:#fff;font-size:20px;backdrop-filter:blur(10px)}
+#res{background:#0b1d3aee;border-radius:16px;margin-top:6px;overflow:hidden;display:none}
+#res div{padding:13px 16px;border-bottom:1px solid #ffffff18;font-size:15px}
+#res small{color:#9fb6d8}
+.hero{text-align:center;padding:26px 0 8px}
+.city{font-size:26px;font-weight:700}
+.date{opacity:.8;font-size:14px;margin-top:2px}
+.ico{width:130px;height:130px;margin:6px auto -6px;display:block;filter:drop-shadow(0 10px 20px #0004)}
+.temp{font-size:92px;font-weight:200;line-height:1;direction:ltr}
+.desc{font-size:20px;margin-top:4px}
+.hl{opacity:.85;margin-top:6px;direction:ltr}
+.glass{background:#ffffff1f;backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border-radius:22px;padding:14px;margin-top:14px;border:1px solid #ffffff22}
+.glass h3{margin:0 0 10px;font-size:13px;font-weight:600;opacity:.8}
+.hours{display:flex;gap:6px;overflow-x:auto;padding-bottom:4px;scrollbar-width:none}
+.hours::-webkit-scrollbar{display:none}
+.hr{flex:0 0 58px;text-align:center;font-size:14px}
+.hr svg{width:34px;height:34px;margin:6px 0}
+.hr b{display:block;direction:ltr}
+.day{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid #ffffff18}
+.day:last-child{border:0}
+.day .n{width:74px;font-size:15px}
+.day svg{width:30px;height:30px}
+.day .p{width:44px;font-size:12px;color:#9be0ff;direction:ltr;text-align:right}
+.rng{flex:1;height:6px;border-radius:4px;background:#ffffff26;position:relative;direction:ltr}
+.rng i{position:absolute;top:0;bottom:0;border-radius:4px;background:linear-gradient(90deg,#7dd3fc,#fde047,#fb923c)}
+.day .t{width:34px;font-size:14px;direction:ltr;text-align:center}
+.grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
+.grid div{background:#ffffff1a;border-radius:16px;padding:12px;text-align:center}
+.grid b{display:block;font-size:20px;margin-top:4px;direction:ltr}
+.grid span{font-size:12px;opacity:.8}
+#err{text-align:center;padding:60px 20px;display:none}
+.saved{display:flex;gap:6px;margin-top:10px;overflow-x:auto;scrollbar-width:none}
+.saved button{flex:0 0 auto;background:#ffffff22;border:0;border-radius:20px;color:#fff;padding:8px 14px;font-family:inherit;font-size:14px}
+.saved button.on{background:#ffffff55}
+</style>
+</head>
+<body>
+<canvas id="fx"></canvas>
+<div class="wrap">
+  <div class="bar"><input id="q" placeholder="ابحث عن مدينة..." autocomplete="off"><button id="loc" title="موقعي">⌖</button></div>
+  <div id="res"></div>
+  <div class="saved" id="saved"></div>
+  <div id="err">مقدرتش أجيب الطقس. اتأكد إن النت شغال وجرب تاني.</div>
+  <div id="main" style="display:none">
+    <div class="hero"><div class="city" id="city"></div><div class="date" id="date"></div><span id="bigico"></span><div class="temp" id="temp"></div><div class="desc" id="desc"></div><div class="hl" id="hl"></div></div>
+    <div class="glass"><h3>الساعات الجاية</h3><div class="hours" id="hours"></div></div>
+    <div class="glass"><h3>توقعات ٧ أيام</h3><div id="days"></div></div>
+    <div class="glass"><h3>تفاصيل</h3><div class="grid"><div><span>الإحساس</span><b id="fl"></b></div><div><span>الرطوبة</span><b id="hu"></b></div><div><span>الرياح</span><b id="wi"></b></div><div><span>الشروق</span><b id="sr"></b></div><div><span>الغروب</span><b id="ss"></b></div><div><span>احتمال مطر</span><b id="pr"></b></div></div></div>
+  </div>
+</div>
+<script>
+const $=id=>document.getElementById(id);
+const AR=n=>String(n).replace(/\d/g,d=>"٠١٢٣٤٥٦٧٨٩"[d]);
+const DN=["الأحد","الاثنين","الثلاثاء","الأربعاء","الخميس","الجمعة","السبت"],MN=["يناير","فبراير","مارس","أبريل","مايو","يونيو","يوليو","أغسطس","سبتمبر","أكتوبر","نوفمبر","ديسمبر"];
+// WMO -> [kind, arabic]
+function wm(c){if(c==0)return["clear","صافي"];if(c<=2)return["pcloud","غائم جزئياً"];if(c==3)return["cloud","غائم"];if(c<=48)return["fog","ضباب"];if(c<=57)return["rain","رذاذ"];if(c<=67)return["rain","مطر"];if(c<=77)return["snow","ثلج"];if(c<=82)return["rain","زخات مطر"];if(c<=86)return["snow","زخات ثلج"];return["storm","عاصفة رعدية"]}
+function icon(k,day=true){const sun='<circle cx="32" cy="32" r="12" fill="#FDE047"/><g stroke="#FDE047" stroke-width="3" stroke-linecap="round"><path d="M32 6v7M32 51v7M6 32h7M51 32h7M13.6 13.6l5 5M45.4 45.4l5 5M13.6 50.4l5-5M45.4 18.6l5-5"/></g>';
+  const moon='<path d="M40 10a22 22 0 1 0 14 38A18 18 0 0 1 40 10z" fill="#E2E8F0"/>';
+  const cl=(x,y,f="#F1F5F9")=>`<g transform="translate(${x} ${y})"><ellipse cx="26" cy="38" rx="20" ry="11" fill="${f}"/><circle cx="20" cy="30" r="10" fill="${f}"/><circle cx="33" cy="27" r="13" fill="${f}"/></g>`;
+  let b="";
+  if(k=="clear")b=day?sun:moon;
+  else if(k=="pcloud")b=(day?'<g transform="translate(8 -4) scale(.8)">'+sun+'</g>':'<g transform="translate(10 -4) scale(.8)">'+moon+'</g>')+cl(4,6);
+  else if(k=="cloud")b=cl(4,2,"#CBD5E1")+cl(0,10);
+  else if(k=="fog")b=cl(4,0)+'<g stroke="#E2E8F0" stroke-width="4" stroke-linecap="round"><path d="M10 48h44M16 56h32"/></g>';
+  else if(k=="rain")b=cl(4,-2,"#CBD5E1")+'<g stroke="#7DD3FC" stroke-width="4" stroke-linecap="round"><path d="M22 46l-3 8M33 46l-3 8M44 46l-3 8"/></g>';
+  else if(k=="snow")b=cl(4,-2,"#E2E8F0")+'<g fill="#fff"><circle cx="21" cy="50" r="3"/><circle cx="33" cy="54" r="3"/><circle cx="45" cy="50" r="3"/></g>';
+  else b=cl(4,-4,"#94A3B8")+'<path d="M35 38l-8 12h7l-4 11 12-15h-8l5-8z" fill="#FDE047"/>';
+  return `<svg viewBox="0 0 64 64">${b}</svg>`}
+const BG={clear:["#0b4a9e","#4db5ff"],pcloud:["#35618f","#7fb4de"],cloud:["#475569","#94a3b8"],fog:["#64748b","#b6c2d1"],rain:["#1e3a5f","#4a6a8a"],snow:["#5f7a94","#cfe0ee"],storm:["#1b1f3a","#4a4e75"]};
+const NIGHT={clear:["#050d24","#1c2f66"],pcloud:["#0c1a38","#34476e"],cloud:["#161d2b","#3a4558"],fog:["#1d2533","#4b5667"],rain:["#0b1424","#2a3b55"],snow:["#1e2a3a","#59708a"],storm:["#0a0b17","#2a2d4a"]};
+let FX={k:"clear",day:true},P=[];
+const cv=$("fx"),cx=cv.getContext("2d");function rs(){cv.width=innerWidth;cv.height=innerHeight}rs();addEventListener("resize",rs);
+function fxSet(k,day){FX={k,day};P=[];const n=k=="rain"||k=="storm"?140:k=="snow"?90:k=="clear"&&!day?80:k.includes("cloud")?6:0;
+  for(let i=0;i<n;i++)P.push({x:Math.random()*innerWidth,y:Math.random()*innerHeight,v:Math.random(),r:Math.random()})}
+(function loop(){cx.clearRect(0,0,cv.width,cv.height);const{k,day}=FX;
+  for(const p of P){
+    if(k=="rain"||k=="storm"){cx.strokeStyle="#bfe3ffaa";cx.lineWidth=1.5;cx.beginPath();cx.moveTo(p.x,p.y);cx.lineTo(p.x-3,p.y+14);cx.stroke();p.y+=14+p.v*10;p.x-=1.5;if(p.y>cv.height){p.y=-20;p.x=Math.random()*cv.width}}
+    else if(k=="snow"){cx.fillStyle="#ffffffcc";cx.beginPath();cx.arc(p.x,p.y,1.5+p.r*2.5,0,7);cx.fill();p.y+=.8+p.v*1.5;p.x+=Math.sin(p.y/30+p.r*6)*.6;if(p.y>cv.height){p.y=-5;p.x=Math.random()*cv.width}}
+    else if(k=="clear"&&!day){cx.fillStyle="rgba(255,255,255,"+(.3+.7*Math.abs(Math.sin(Date.now()/900+p.r*9)))+")";cx.fillRect(p.x,p.y*.6,1.6,1.6)}
+    else if(k.includes("cloud")){cx.fillStyle="#ffffff"+(day?"22":"11");const w=120+p.r*160;cx.beginPath();cx.ellipse(p.x,p.y*.5+40,w,w*.28,0,0,7);cx.fill();p.x+=.15+p.v*.3;if(p.x-w>cv.width)p.x=-w}}
+  if(k=="storm"&&Math.random()<.008){cx.fillStyle="#ffffff55";cx.fillRect(0,0,cv.width,cv.height)}
+  requestAnimationFrame(loop)})();
+let S;try{S=JSON.parse(localStorage.getItem("wthr1")||"null")}catch(e){}S=S||{cities:[{n:"الإسكندرية",lat:31.2,lon:29.92}],cur:0};
+const save=()=>localStorage.setItem("wthr1",JSON.stringify(S));
+function saved(){$("saved").innerHTML=S.cities.map((c,i)=>`<button class="${i==S.cur?"on":""}" data-i="${i}">${c.n}</button>`).join("");}
+$("saved").onclick=e=>{const b=e.target.closest("button");if(b){S.cur=+b.dataset.i;save();load()}};
+async function load(){saved();const c=S.cities[S.cur];$("err").style.display="none";
+  try{const r=await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${c.lat}&longitude=${c.lon}&current=temperature_2m,apparent_temperature,relative_humidity_2m,wind_speed_10m,weather_code,is_day&hourly=temperature_2m,weather_code&daily=weather_code,temperature_2m_max,temperature_2m_min,sunrise,sunset,precipitation_probability_max&timezone=auto&forecast_days=7`);
+    if(!r.ok)throw 0;render(c,await r.json())}catch(e){$("main").style.display="none";$("err").style.display="block"}}
+function render(c,d){
+  const cu=d.current,day=!!cu.is_day,[k,t]=wm(cu.weather_code);
+  document.body.style.setProperty("--bg","linear-gradient("+(day?BG:NIGHT)[k].join(",")+")");document.querySelector('meta[name=theme-color]').content=(day?BG:NIGHT)[k][0];
+  fxSet(k,day);
+  $("main").style.display="block";$("city").textContent=c.n;const n=new Date();$("date").textContent=DN[n.getDay()]+"، "+AR(n.getDate())+" "+MN[n.getMonth()];
+  $("bigico").innerHTML=icon(k,day).replace("<svg","<svg class='ico'");$("temp").textContent=AR(Math.round(cu.temperature_2m))+"°";$("desc").textContent=t;
+  $("hl").textContent=AR(Math.round(d.daily.temperature_2m_max[0]))+"° / "+AR(Math.round(d.daily.temperature_2m_min[0]))+"°";
+  const ct=cu.time,hi=d.hourly.time.findIndex(x=>x>=ct.slice(0,13));let hs="";
+  for(let i=hi;i<hi+24&&i<d.hourly.time.length;i++){const h=+d.hourly.time[i].slice(11,13),hd=h>=6&&h<19;hs+=`<div class="hr">${i==hi?"الآن":AR(h%12||12)+(h<12?"ص":"م")}${icon(wm(d.hourly.weather_code[i])[0],hd)}<b>${AR(Math.round(d.hourly.temperature_2m[i]))}°</b></div>`}
+  $("hours").innerHTML=hs;
+  const mn=Math.min(...d.daily.temperature_2m_min),mx=Math.max(...d.daily.temperature_2m_max);
+  $("days").innerHTML=d.daily.time.map((s,i)=>{const dt=new Date(s+"T12:00:00"),lo=d.daily.temperature_2m_min[i],hi2=d.daily.temperature_2m_max[i];
+    return `<div class="day"><span class="n">${i==0?"النهارده":DN[dt.getDay()]}</span>${icon(wm(d.daily.weather_code[i])[0])}<span class="p">${d.daily.precipitation_probability_max[i]>=20?AR(d.daily.precipitation_probability_max[i])+"٪":""}</span><span class="t">${AR(Math.round(lo))}°</span><div class="rng"><i style="left:${(lo-mn)/(mx-mn||1)*100}%;right:${100-(hi2-mn)/(mx-mn||1)*100}%"></i></div><span class="t">${AR(Math.round(hi2))}°</span></div>`}).join("");
+  const tm=s=>{const h=+s.slice(11,13);return AR(h%12||12)+":"+AR(s.slice(14,16))+(h<12?" ص":" م")};
+  $("fl").textContent=AR(Math.round(cu.apparent_temperature))+"°";$("hu").textContent=AR(cu.relative_humidity_2m)+"٪";$("wi").textContent=AR(Math.round(cu.wind_speed_10m))+" كم/س";
+  $("sr").textContent=tm(d.daily.sunrise[0]);$("ss").textContent=tm(d.daily.sunset[0]);$("pr").textContent=AR(d.daily.precipitation_probability_max[0])+"٪";
+}
+let tmr;$("q").oninput=()=>{clearTimeout(tmr);const v=$("q").value.trim();if(v.length<2){$("res").style.display="none";return}
+  tmr=setTimeout(async()=>{try{const r=await(await fetch("https://geocoding-api.open-meteo.com/v1/search?count=6&language=ar&name="+encodeURIComponent(v))).json();
+    $("res").style.display=r.results?"block":"none";$("res").innerHTML=(r.results||[]).map((x,i)=>`<div data-i="${i}">${x.name} <small>${x.admin1||""} ${x.country||""}</small></div>`).join("");$("res").r=r.results||[]}catch(e){}},300)};
+$("res").onclick=e=>{const d=e.target.closest("[data-i]");if(!d)return;const x=$("res").r[+d.dataset.i];let i=S.cities.findIndex(c=>Math.abs(c.lat-x.latitude)<.05&&Math.abs(c.lon-x.longitude)<.05);
+  if(i<0){S.cities.push({n:x.name,lat:x.latitude,lon:x.longitude});i=S.cities.length-1}S.cur=i;save();$("res").style.display="none";$("q").value="";load()};
+$("loc").onclick=()=>{if(!navigator.geolocation)return;navigator.geolocation.getCurrentPosition(p=>{S.cities.push({n:"موقعي",lat:p.coords.latitude,lon:p.coords.longitude});S.cities=S.cities.filter((c,i)=>c.n!="موقعي"||i==S.cities.length-1);S.cur=S.cities.length-1;save();load()},()=>alert("مقدرتش أحدد موقعك. اسمح بالوصول للموقع أو ابحث باسم المدينة."))};
+window.W={load,fx:fxSet,S};
+load();
+</script>
+</body></html>
